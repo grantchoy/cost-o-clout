@@ -1,0 +1,280 @@
+---
+title: "Analysis"
+author: "Grant Choy"
+date: "April 26, 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rtweet)
+library(httpuv)
+library(magrittr)
+library(igraph)
+library(ggplot2)
+# source('grantsfuncs.R')
+```
+
+```{r}
+consumer_key <- read.csv('mytokens.csv')
+consumer_secret <- c('mykeys.csv')
+
+tok1 = create_token(consumer_key = consumer_key[1],
+                    consumer_secret = consumer_secret[1])
+tok2 = create_token(consumer_key = consumer_key[2], consumer_secret = consumer_secret[2])
+tok3 = create_token(consumer_key = consumer_key[3], consumer_secret = consumer_secret[3])
+tok4 = create_token(consumer_key = consumer_key[4], consumer_secret = consumer_secret[4])
+tok5 = create_token(consumer_key = consumer_key[5], consumer_secret = consumer_secret[5])
+tok6 = create_token(consumer_key = consumer_key[6], consumer_secret = consumer_secret[6])
+tok7 = create_token(consumer_key = consumer_key[7], consumer_secret = consumer_secret[7])
+
+```
+
+
+```{r}
+inflFrame <- read.csv("D:/Grant Choy/Documents/Course Files/Spring 2018/Econ 199/Influencers/influencescrape/inflFrame.csv", header=FALSE, sep=";")
+
+twitNames = inflFrame[,3] %>%
+  gsub(pattern = 'https://twitter.com/', replacement = '') %>%
+  as_userid()
+
+inflFrame[,3] = twitNames
+inflFrame = inflFrame[-1,-1]
+colnames(inflFrame) = c('inflName', 'screen_name', 'price', 'reach')
+
+# inflDataAll = lookup_users(twitNames) %>% 
+#   data.frame()
+inflDataAll <- read.csv("D:/Grant Choy/Documents/Course Files/Spring 2018/Econ 199/Influencers/twitscrape/inflDataAll.csv", sep=";", comment.char="#")
+relCols = c('user_id', 'screen_name', 'location', 'followers_count', 'friends_count', 'statuses_count', 'account_lang')
+inflData = inflDataAll[,relCols]
+
+
+fullFrame = merge.data.frame(inflFrame, inflData, by = 'screen_name') %>%
+  unique()
+
+write.csv2(fullFrame, file = 'fullFrame.csv')
+```
+
+```{r}
+tokens = c(tok1, tok2, tok3, tok4, tok5, tok6, tok7)
+findTok = function(limit = 40){
+  lims = c()
+  for(i in tokens){
+    useI = rate_limit(i) %>%
+      data.frame()
+    canUse = (useI[limit,]$remaining == 180)
+    if(canUse){
+      return(i)
+    }
+    lims =c(lims, useI[limit,]$reset)
+  }
+  print('times')
+  print(lims)
+  start = Sys.time()
+  print(start)
+  while((as.numeric(Sys.time()) - as.numeric(start)) < 780){
+    print((as.numeric(Sys.time()) - as.numeric(start)))
+    Sys.sleep(60)
+  }
+  return(findTok(limit))
+}
+```
+
+```{r}
+folset = inflDataAll[,c('user_id', "followers_count", 'screen_name')]
+folset = folset[order(folset$followers_count),]
+folset = folset[folset$followers_count > 0, ]
+
+tired = folset$screen_name %>% as.character()
+index = 3077:len(tired)
+
+curTok = tok1
+curTokCnt = 15
+for(i in index){
+  print(i)
+  curName = tired[i]
+  stillRun = TRUE
+  curPage = "-1"
+  toSave = c()
+  while(stillRun){
+    curTokCnt = curTokCnt - 1
+    if(curTokCnt == 0){
+      curTok = findTok()
+      curTokCnt = 15
+    }
+    followList = tryCatch(get_followers(curName, n = 5000,
+        retryonratelimit = F, 
+        token = curTok,
+        parse = FALSE,
+        page = curPage), 
+                      error = function(c) NULL)
+    if(len(followList) == 0){
+      break
+    }
+    toSave = c(toSave, followList[[1]]$ids)
+    curPage = followList[[1]]$next_cursor_str
+    if(is.null(followList) | curPage == "0"){
+      stillRun = FALSE
+    }
+  }
+  print(toSave)
+  fileLoc = paste('folDl/', curName, '.csv', sep = '')
+  write.csv(toSave, file = fileLoc)
+}
+
+```
+
+```{r}
+microFrame$screen_name = microFrame$screen_name %>%
+  as.character()
+a = 71:len(microFrame$inflName)
+curTok = findTok(limit = 20)
+curTokCnt = 180
+missingfiles = 0
+clusFrame = matrix(nrow = len(microFrame$inflName), ncol = 3) %>% data.frame()
+for(i in a){
+  remRow = 0
+  print(i)
+  curFile = paste("D:/Grant Choy/Documents/Course Files/Spring 2018/Econ 199/Influencers/twitscrape/folDl/", microFrame$screen_name[i],".csv", sep = '')
+  print(curFile)
+  cur = tryCatch(read.csv(curFile), error = function(c) NULL)
+  if(is.null(cur)){
+    print('no file')
+    missingfiles = missingfiles + 1
+    next
+  }
+  cur = data.frame(cur)
+  numPairs = 0
+  if(dim(cur)[1] < 15){
+    print('to few followers')
+    next
+  }
+  if(dim(cur)[1] >= 100){
+    numNames = dim(cur)[1]
+    draw = sample(numNames, size = 360, replace = TRUE)
+    otherDraw = sample(numNames, size = 360, replace = TRUE)
+    curIds = cur[draw,2] %>% as_userid()
+    otherIds = cur[otherDraw, 2] %>% as_userid()
+    curScreen = lookup_users(curIds, token = curTok) %>% data.frame()
+    curScreen = curScreen$screen_name
+    refill = sample(len(curScreen), size = (360 -len(curScreen)), replace = TRUE)
+    curScreen = c(curScreen, curScreen[refill])
+    otherScreen = lookup_users(otherIds, token = curTok)
+    otherScreen = otherScreen$screen_name
+    refill = sample(len(otherScreen), size = (360 -len(otherScreen)), replace = TRUE)
+    otherScreen = c(otherScreen, otherScreen[refill])
+    for(j in 1:360){
+      if(j %% 10 == 0) print(j)
+      curTokCnt = curTokCnt - 1
+      if(curTokCnt == 0){
+        curTok = findTok(20)
+        curTokCnt = 180
+      }
+      if(curScreen[j] == otherScreen[j]){
+        remRow = remRow + 1
+        next
+      }
+      relation = lookup_friendships(source = curScreen[j], target = otherScreen[j], token = curTok)
+      if(dim(relation)[1] == 0){
+        remRow = remRow + 1
+        next
+      }
+      edgeLoc = relation[relation$variable == 'following', 'value'] %>%
+        data.frame()
+      edgeLoc = (edgeLoc == 'TRUE')
+      numPairs = numPairs + sum(edgeLoc)
+    }
+  }
+  print('gahhh')
+  print(numPairs)
+  clusFrame[i,1] = microFrame$screen_name[i]
+  clusFrame[i,2] = numPairs
+  clusFrame[i,3] = remRow
+  fileName = 'clusterCoeff.csv'
+  # fileName = paste(microFrame$screen_name[i], '.csv', sep = '')
+  write.csv(clusFrame, fileName)
+}
+
+```
+
+
+
+```{r}
+curTok = findTok(limit = 20)
+curTokCnt = 180
+# visual = c('RiciRiviera', 'aniabasak')
+visual = 'anamikadbn'
+for(i in 1){
+  visMat = matrix(0, nrow = 70, ncol = 70)
+  print(i)
+  curFile = paste("D:/Grant Choy/Documents/Course Files/Spring 2018/Econ 199/Influencers/twitscrape/folDl/", visual[i],".csv", sep = '')
+  print(curFile)
+  cur = tryCatch(read.csv(curFile), error = function(c) NULL)
+  if(is.null(cur)){
+    print('no file')
+    break
+  }
+  cur = data.frame(cur)
+  if(dim(cur)[1] < 15){
+    print('to few followers')
+    next
+  }
+  numNames = dim(cur)[1]
+  draw = sample(numNames, size = 360, replace = FALSE)
+  curIds = cur[draw,2] %>% as_userid()
+  curScreen = lookup_users(curIds, token = curTok) %>% data.frame()
+  curScreen = curScreen$screen_name
+  for(j in 1:70){
+    if(j %% 10 == 0) print(j)
+    for(k in 1:70){
+      if(k %% 10 == 0){
+        print('k')
+        print(k)
+      }
+      curTokCnt = curTokCnt - 1
+      if(curTokCnt == 0){
+        curTok = findTok(20)
+        curTokCnt = 180
+      }
+      if(j == k){
+        next
+      }
+      relation = lookup_friendships(source = curScreen[k], target = curScreen[j], token = curTok)
+      if(dim(relation)[1] == 0){
+        next
+      }
+      edgeLoc = relation[relation$variable == 'following', 'value'] %>%
+        data.frame()
+      edgeLoc = (edgeLoc == 'TRUE')
+      print(edgeLoc)
+      if(edgeLoc[1]){
+        visMat[k,j] = 1
+      }
+      if(edgeLoc[2]){
+        visMat[j,k] = 1
+      }
+    }
+  }
+  fileName = paste(visual[i], 'visual.csv', sep = '')
+  # fileName = paste(microFrame$screen_name[i], '.csv', sep = '')
+  write.csv(visMat, fileName)
+}
+```
+
+
+```{r}
+bigMat = matrix(0, nrow = 71, ncol = 71)
+bigMat[2:36,2:36] = visMat
+bigMat[1,] = 1
+bigMat[,1] = 1
+noidea = graph.adjacency(bigMat) %>% simplify()
+V(noidea)$label = NA
+l = layout.fruchterman.reingold(noidea, repulserad=vcount(noidea)^3,
+                            area=vcount(noidea)^2.4)
+l <- layout.norm(l, ymin=-1, ymax=1, xmin=-1, xmax=1)
+
+plot(noidea, rescale = FALSE, layout = l*1.8, edge.arrow.size = .1)
+plot(noidea, layout = layout.fruchterman.reingold, edge.arrow.size = .1)
+```
+
+

@@ -1,0 +1,94 @@
+---
+title: "Analysis"
+author: "Grant Choy"
+date: "April 30, 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("D:/Grant Choy/Documents/Course Files/Spring 2018/Econ 199/Influencers")
+library(ggplot2)
+library(httpuv)
+library(magrittr)
+library(igraph)
+library(readr)
+len = length
+```
+
+```{r}
+fullFrame <- read.csv("D:/Grant Choy/Documents/Course Files/Spring 2018/Econ 199/Influencers/twitscrape/fullFrame.csv", sep=";") %>%
+  data.frame()
+
+catDf <- read.csv("D:/Grant Choy/Documents/Course Files/Spring 2018/Econ 199/Influencers/influencescrape/catDf.csv", row.names=1, sep=";")
+
+fullFrame = merge(fullFrame, catDf) %>% unique()
+clustCoef <- read.csv("D:/Grant Choy/Documents/Course Files/Spring 2018/Econ 199/Influencers/twitscrape/clusterCoeff.csv", row.names=1)
+colnames(clustCoef) = c('screen_name', 'Sucess', 'remRows')
+fullFrame = merge(fullFrame, clustCoef, by = 'screen_name') %>% unique()
+fullFrame = fullFrame[!is.na(fullFrame$Sucess),]
+lcc = fullFrame$Sucess/(720-fullFrame$remRows)
+fullFrame = data.frame(fullFrame, lcc)
+
+
+
+ks = fullFrame$reach %>%
+  grepl(pattern = 'k')
+ms = fullFrame$reach %>%
+  grepl(pattern = 'm')
+reach = fullFrame$reach %>%
+  gsub(pattern = 'k', replacement = '') %>%
+  gsub(pattern = 'm', replacement = '') %>%
+  as.numeric()
+reach[ks] = reach[ks]*1000
+reach[ms] = reach[ms]*(10^6)
+fullFrame$reach = reach
+
+cats = colnames(catDf)[-1]
+for(i in cats){
+  fullFrame[,i] = fullFrame[,i] %>% as.factor()
+}
+
+ggplot(fullFrame, aes(x = followers_count)) + geom_point(aes(y = price))
+microFrame = fullFrame[(fullFrame$reach < 10^5) & (fullFrame$followers_count >50),]
+microFrame = microFrame[microFrame$price <= 500,]
+microFrame = microFrame[microFrame$statuses_count > 500,]
+
+```
+
+```{r}
+ggplot(microFrame, aes(x = followers_count, y = price)) + 
+  geom_point() + 
+  stat_smooth(method = 'lm', se = FALSE) + 
+  labs(x = 'Number of Followers', y = 'Price ($)')
+
+
+microLm = lm(microFrame$price ~ microFrame$followers_count)
+summary(microLm)
+```
+
+```{r}
+relCols = c('price', 'followers_count', 'statuses_count', colnames(catDf), 'lcc', 'account_lang')
+relCols = relCols[c(-21, -23, -4)]
+relDf = microFrame[,relCols]
+
+ggplot(relDf, aes(x = lcc, y = price)) + 
+  geom_point() + 
+  stat_smooth(method = 'lm', se = F) + 
+  labs(x= 'LCC', y = 'Price ($)')
+lccLm = lm(relDf$price ~ relDf$lcc) %>% summary()
+lccLm = lccLm$coefficients
+lm(formula = price~., relDf) %>% summary()
+```
+
+```{r}
+ggplot(relDf, aes(x = lcc)) + 
+  geom_histogram(bins = 30) +
+  labs(x = 'LCC', y = 'Number of occurrences')
+```
+
+```{r}
+ggplot(relDf, aes(x = lcc, y = price)) + geom_point() + stat_smooth(method = 'lm', se = FALSE)
+lccFol = lm(relDf$lcc ~relDf$followers_count) %>% summary()
+```
+

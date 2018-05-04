@@ -1,0 +1,158 @@
+---
+title: "Influencers"
+author: "Grant Choy"
+date: "April 15, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rvest)
+setwd("D:/Grant Choy/Documents/Course Files/Spring 2018/Econ 199/Influencers/influencescrape")
+source('grantsfuncs.R')
+```
+
+```{r}
+test = read_html('20start.html')
+hrefnods = xml_find_all(test, '//a[@class="advanced-search-card clearfix"]')
+webs20 = xml_attr(hrefnods, 'href')
+```
+
+```{r}
+
+priceXPath = '//div[@class = "influencer-about-content white-content-block"]/h4/strong'
+reachPath = '//p[@class = "text-center lead emojify-me"]/strong'
+findReach = function(html){
+  reach = xml_find_all(html, reachPath) %>%
+  xml_contents() %>%
+  as.character() %>%
+  gsub(pattern= '\\r',replacement =  '') %>%
+  gsub(pattern= '\\n',replacement =  '') %>%
+  gsub(pattern = ' ', replacement = '')
+  return(reach[2])
+}
+urlToName = function(web){
+  curUrl = paste('https://influence.co', web, sep = '')
+  curFile = paste('profdls/', web, '.html', sep = '')
+  #download.file(curUrl, curFile)
+  curHtml = read_html(curFile)
+  href = xml_find_all(curHtml, '//span[@class = "fa fa-twitter"]/../a') %>%
+    xml_attr('href')
+  price = xml_find_all(curHtml, priceXPath) %>%
+    xml_contents() %>% 
+    as.character()
+  reach = findReach(curHtml)
+  return(c(href, price, reach))
+}
+
+full = read_html('fullbody.html')
+nodePath = '//div[@class = "influencer-card styled"]'
+influenceNodes = xml_find_all(full, nodePath)
+inflLen = len(influenceNodes)
+inflFrame = matrix(nrow = inflLen, ncol = 4)
+
+
+
+for(i in 1:inflLen){
+  print(i)
+  curNode = influenceNodes[[i]]
+  href = xml_attr(xml_child(curNode), 'href')
+  inflFrame[i,1] = href
+  namePrice= urlToName(href)
+  inflFrame[i,2] = namePrice[1]
+  inflFrame[i,3] = namePrice[2]
+  inflFrame[i,4] = namePrice[3]
+}
+```
+
+```{r}
+prices = inflFrame[,3]
+prices = gsub('[\\$,]', '', prices) %>%
+  as.numeric()
+inflFrame[,3] = prices
+write.csv2(inflFrame, file = 'inflFrame.csv')
+```
+
+```{r}
+catPath = '//span[@class = "category-ribbon"]/a'
+findCat = function(web){
+  curFile = paste('profdls/', web, '.html', sep = '') %>%
+    read_html() %>%
+    xml_find_all(xpath = catPath) %>%
+    xml_contents() %>%
+    as.character()
+  return(curFile)
+}
+
+catagories = list()
+index = 1:len(inflFrame$V1)
+for(i in index){
+  cats = findCat(inflFrame$V1[i])
+  if(len(cats) == 0){
+    cats= 'Null'
+  }
+  catagories[i] = list(cats)
+  names(catagories)[i] = as.character(inflFrame$V1[i])
+  print(names(catagories)[i])
+  print(inflFrame$V1[i])
+  if(i %% 10 ==0){
+    print(i)
+  }
+}
+
+flattened = c()
+for(i in catagories){
+  flattened = c(flattened, i)
+}
+uniqFlat = unique(flattened)
+uniqFlatMat = matrix(nrow = len(uniqFlat), ncol = 2)
+uniqFlatMat[,1] = uniqFlat
+for(i in 1:len(uniqFlat)){
+  a = sum((flattened == uniqFlat[i]))
+  uniqFlatMat[i,2] = a
+}
+uniqFlatMat = data.frame(uniqFlatMat)
+uniqFlatMat$X2 = uniqFlatMat$X2 %>% as.numeric()
+uniqFlatMat = uniqFlatMat[uniqFlatMat$X2 >200,]
+
+catDf = matrix(nrow = len(catagories), ncol = 19) %>%
+  data.frame()
+catDf[,1] = names(catagories)
+for(i in index){
+  for(j in 1:19){
+    catDf[i,(j+1)] = any(catagories[[i]] == uniqFlatMat[j,1])
+  }
+  catDf[i,] = as.numeric(catDf[i,])
+}
+
+colnames(catDf) = c('inflName', uniqFlatMat[,1])
+
+write.csv2(catDf, 'catDf.csv')
+```
+
+
+
+
+```{r}
+inflFrame <- read.csv("D:/Grant Choy/Documents/Course Files/Spring 2018/Econ 199/Influencers/influencescrape/inflFrame.csv", sep=";")
+inflFrame = inflFrame[,c(-1)]
+
+testname = inflFrame[1,1]
+testurl = paste('https://influence.co', testname, sep = '')
+testDl = download.file(testurl, 'profdls/testpage.html')
+testhtml = read_html('testpage.html')
+testtwit = xml_find_all(testhtml, '//span[@class = "fa fa-twitter"]/../a')
+testtwit = xml_attr(testtwit, 'href')
+testprice = xml_find_all(testhtml, priceXPath) %>%
+  xml_contents() %>%
+  as.character()
+
+
+
+```
+
+
+
+
+
+
